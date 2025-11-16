@@ -22,6 +22,9 @@
         .loading {
             display: none;
         }
+        .proxy-status-active { color: #10B981; }
+        .proxy-status-slow { color: #F59E0B; }
+        .proxy-status-dead { color: #EF4444; }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -31,7 +34,7 @@
                 <i class="fas fa-robot mr-3 text-blue-500"></i>
                 SEO Automation Bot
             </h1>
-            <p class="text-gray-600 mb-6">Otomatisasi aktivitas SEO dengan simulasi perilaku manusia</p>
+            <p class="text-gray-600 mb-6">Otomatisasi aktivitas SEO dengan sistem ping test proxy</p>
 
             <form id="botForm" class="space-y-6">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -58,7 +61,7 @@
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
                     <!-- Sessions -->
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-2">
@@ -77,14 +80,22 @@
                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
 
-                    <!-- Status -->
+                    <!-- Min Ping -->
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-2">
-                            <i class="fas fa-info-circle mr-2"></i>Status
+                            <i class="fas fa-tachometer-alt mr-2"></i>Min Ping (ms)
                         </label>
-                        <div id="status" class="px-3 py-2 bg-gray-100 rounded-md text-gray-600">
-                            Siap menjalankan
-                        </div>
+                        <input type="number" name="minPing" value="100" min="1" max="10000"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+
+                    <!-- Max Ping -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-tachometer-alt mr-2"></i>Max Ping (ms)
+                        </label>
+                        <input type="number" name="maxPing" value="5000" min="100" max="30000"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
                 </div>
 
@@ -105,14 +116,31 @@
                             class="flex items-center px-6 py-3 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <i class="fas fa-play mr-2"></i>Jalankan Bot
                     </button>
+                    
+                    <button type="button" id="testProxyBtn"
+                            class="flex items-center px-6 py-3 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500">
+                        <i class="fas fa-vial mr-2"></i>Test Proxy
+                    </button>
+                    
                     <button type="button" id="stopBtn"
                             class="flex items-center px-6 py-3 bg-red-500 text-white rounded-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500">
                         <i class="fas fa-stop mr-2"></i>Stop Bot
                     </button>
+                    
                     <button type="button" id="clearLogBtn"
                             class="flex items-center px-6 py-3 bg-gray-500 text-white rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500">
                         <i class="fas fa-broom mr-2"></i>Bersihkan Log
                     </button>
+                </div>
+
+                <!-- Status -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-info-circle mr-2"></i>Status
+                    </label>
+                    <div id="status" class="px-3 py-2 bg-gray-100 rounded-md text-gray-600">
+                        Siap menjalankan
+                    </div>
                 </div>
             </form>
         </div>
@@ -125,6 +153,7 @@
             <div id="logContainer" class="log-container rounded-md p-4">
                 <div class="log-entry">🚀 SEO Bot siap dijalankan...</div>
                 <div class="log-entry">💡 Masukkan URL target dan klik "Jalankan Bot"</div>
+                <div class="log-entry">📊 Gunakan "Test Proxy" untuk mengetes proxy sebelum menjalankan bot</div>
             </div>
         </div>
 
@@ -132,20 +161,70 @@
         <div id="loading" class="loading fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
             <div class="bg-white p-6 rounded-lg text-center">
                 <i class="fas fa-spinner fa-spin text-4xl text-blue-500 mb-4"></i>
-                <p class="text-lg font-semibold">Menjalankan SEO Bot...</p>
+                <p class="text-lg font-semibold" id="loadingText">Memproses...</p>
                 <p class="text-gray-600">Harap tunggu, proses mungkin memakan waktu beberapa menit</p>
             </div>
         </div>
     </div>
 
     <script>
+        // Test Proxy Function
+        document.getElementById('testProxyBtn').addEventListener('click', async () => {
+            const proxyList = document.querySelector('textarea[name="proxyList"]').value;
+            
+            if (!proxyList.trim()) {
+                addLog('❌ Masukkan daftar proxy terlebih dahulu');
+                return;
+            }
+
+            document.getElementById('loadingText').textContent = 'Testing Proxy...';
+            document.getElementById('loading').style.display = 'flex';
+            document.getElementById('status').textContent = 'Testing Proxy...';
+            document.getElementById('status').className = 'px-3 py-2 bg-yellow-100 rounded-md text-yellow-700';
+
+            try {
+                const response = await fetch('/test-proxies', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ proxyList })
+                });
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    const text = decoder.decode(value);
+                    const lines = text.split('\n');
+                    
+                    lines.forEach(line => {
+                        if (line.trim()) {
+                            addLog(line);
+                        }
+                    });
+                }
+                
+            } catch (error) {
+                addLog('❌ Error: Gagal terhubung ke server');
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('status').textContent = 'Proxy Test Selesai';
+                document.getElementById('status').className = 'px-3 py-2 bg-green-100 rounded-md text-green-700';
+            }
+        });
+
+        // Run Bot Function
         document.getElementById('botForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
             const formData = new FormData(e.target);
             const data = Object.fromEntries(formData);
             
-            // Show loading
+            document.getElementById('loadingText').textContent = 'Menjalankan SEO Bot...';
             document.getElementById('loading').style.display = 'flex';
             document.getElementById('status').textContent = 'Menjalankan...';
             document.getElementById('status').className = 'px-3 py-2 bg-yellow-100 rounded-md text-yellow-700';
@@ -186,7 +265,6 @@
         });
 
         document.getElementById('stopBtn').addEventListener('click', () => {
-            // Implement stop functionality jika needed
             addLog('🛑 Bot dihentikan oleh pengguna');
         });
 
@@ -199,10 +277,20 @@
             const logContainer = document.getElementById('logContainer');
             const logEntry = document.createElement('div');
             logEntry.className = 'log-entry';
+            
+            // Color coding based on message content
+            if (message.includes('✅') || message.includes('🔒') || message.includes('🎉')) {
+                logEntry.classList.add('proxy-status-active');
+            } else if (message.includes('⚠️') || message.includes('🛑') || message.includes('LAMBAT')) {
+                logEntry.classList.add('proxy-status-slow');
+            } else if (message.includes('❌') || message.includes('💥') || message.includes('MATI')) {
+                logEntry.classList.add('proxy-status-dead');
+            }
+            
             logEntry.textContent = message;
             logContainer.appendChild(logEntry);
             logContainer.scrollTop = logContainer.scrollHeight;
         }
     </script>
 </body>
-</html>
+    </html>
