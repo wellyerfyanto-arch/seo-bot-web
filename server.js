@@ -9,62 +9,94 @@ app.use(express.json());
 app.use(express.static('public'));
 app.use(express.urlencoded({ extended: true }));
 
-// Error handling middleware
-app.use((error, req, res, next) => {
-    console.error('Error:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
-});
-
 // Routes
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-    res.json({ 
-        status: 'OK', 
-        timestamp: new Date().toISOString(),
-        playwright: true
-    });
+// Endpoint untuk test proxy saja
+app.post('/test-proxies', async (req, res) => {
+    const { proxyList } = req.body;
+    
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Transfer-Encoding', 'chunked');
+
+    const sendLog = (message) => {
+        res.write(message + '\n');
+    };
+
+    try {
+        const bot = new SEOBot(sendLog);
+        const proxies = proxyList ? proxyList.split('\n').filter(p => p.trim()) : [];
+        
+        if (proxies.length === 0) {
+            sendLog('❌ Tidak ada proxy untuk di-test');
+            res.end();
+            return;
+        }
+
+        sendLog('🔍 Memulai test proxy dengan sistem ping...');
+        const activeProxies = await bot.testProxiesWithPing(proxies);
+        
+        sendLog('\n📊 HASIL TEST PROXY:');
+        sendLog(`✅ Proxy aktif: ${activeProxies.filter(p => p.status === 'active').length}`);
+        sendLog(`⚠️  Proxy lambat: ${activeProxies.filter(p => p.status === 'slow').length}`);
+        sendLog(`❌ Proxy mati: ${activeProxies.filter(p => p.status === 'dead').length}`);
+        
+        sendLog('\n🎯 REKOMENDASI PROXY:');
+        activeProxies
+            .filter(p => p.status === 'active')
+            .sort((a, b) => a.ping - b.ping)
+            .forEach(proxy => {
+                sendLog(`🏎️  ${proxy.proxy} (${proxy.ping}ms)`);
+            });
+
+        res.end();
+
+    } catch (error) {
+        sendLog(`❌ ERROR: ${error.message}`);
+        res.end();
+    }
 });
 
 // Endpoint untuk menjalankan bot
 app.post('/run-bot', async (req, res) => {
-    const { targetUrl, proxyList, useMobile, delay, sessions } = req.body;
+    const { targetUrl, proxyList, useMobile, delay, sessions, minPing, maxPing } = req.body;
     
-    // Validasi input
-    if (!targetUrl) {
-        return res.status(400).json({ error: 'URL target diperlukan' });
-    }
-
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.setHeader('Transfer-Encoding', 'chunked');
 
+    const sendLog = (message) => {
+        res.write(message + '\n');
+    };
+
     try {
-        const bot = new SEOBot((message) => {
-            res.write(message + '\n');
-        });
+        const bot = new SEOBot(sendLog);
         
         await bot.runSEOBot(
             targetUrl,
             proxyList ? proxyList.split('\n').filter(p => p.trim()) : [],
             useMobile === 'true',
             parseInt(delay) || 5,
-            parseInt(sessions) || 1
+            parseInt(sessions) || 1,
+            parseInt(minPing) || 100,
+            parseInt(maxPing) || 5000
         );
 
-        res.write('✅ SEMUA SESI SELESAI!\n');
+        sendLog('✅ SEMUA SESI SELESAI!');
         res.end();
 
     } catch (error) {
-        console.error('Bot error:', error);
-        res.write(`❌ ERROR: ${error.message}\n`);
+        sendLog(`❌ ERROR: ${error.message}`);
         res.end();
     }
 });
 
+// Health check untuk Railway
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
 app.listen(PORT, () => {
     console.log(`🚀 SEO Bot Server running on port ${PORT}`);
-    console.log(`📧 Access via: http://localhost:${PORT}`);
 });
