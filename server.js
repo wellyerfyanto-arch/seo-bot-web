@@ -35,20 +35,21 @@ app.post('/test-proxies', async (req, res) => {
             return;
         }
 
-        sendLog('🔍 Memulai test proxy dengan sistem ping...');
-        const activeProxies = await bot.testProxiesWithPing(proxies);
+        sendLog('🔍 Memulai test proxy dengan multiple methods...');
+        const activeProxies = await bot.testProxiesComprehensive(proxies);
         
         sendLog('\n📊 HASIL TEST PROXY:');
         sendLog(`✅ Proxy aktif: ${activeProxies.filter(p => p.status === 'active').length}`);
         sendLog(`⚠️  Proxy lambat: ${activeProxies.filter(p => p.status === 'slow').length}`);
         sendLog(`❌ Proxy mati: ${activeProxies.filter(p => p.status === 'dead').length}`);
         
-        sendLog('\n🎯 REKOMENDASI PROXY:');
+        sendLog('\n🎯 REKOMENDASI PROXY (Tercepat):');
         activeProxies
             .filter(p => p.status === 'active')
-            .sort((a, b) => a.ping - b.ping)
+            .sort((a, b) => a.responseTime - b.responseTime)
+            .slice(0, 10)
             .forEach(proxy => {
-                sendLog(`🏎️  ${proxy.proxy} (${proxy.ping}ms)`);
+                sendLog(`🏎️  ${proxy.proxy} (${proxy.responseTime}ms)`);
             });
 
         res.end();
