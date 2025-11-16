@@ -9,25 +9,42 @@ app.use(express.json());
 app.use(express.static('public'));
 app.use(express.urlencoded({ extended: true }));
 
+// Error handling middleware
+app.use((error, req, res, next) => {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+});
+
 // Routes
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.json({ 
+        status: 'OK', 
+        timestamp: new Date().toISOString(),
+        playwright: true
+    });
 });
 
 // Endpoint untuk menjalankan bot
 app.post('/run-bot', async (req, res) => {
     const { targetUrl, proxyList, useMobile, delay, sessions } = req.body;
     
+    // Validasi input
+    if (!targetUrl) {
+        return res.status(400).json({ error: 'URL target diperlukan' });
+    }
+
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.setHeader('Transfer-Encoding', 'chunked');
 
-    // Fungsi untuk mengirim log ke client
-    const sendLog = (message) => {
-        res.write(message + '\n');
-    };
-
     try {
-        const bot = new SEOBot(sendLog);
+        const bot = new SEOBot((message) => {
+            res.write(message + '\n');
+        });
         
         await bot.runSEOBot(
             targetUrl,
@@ -37,18 +54,14 @@ app.post('/run-bot', async (req, res) => {
             parseInt(sessions) || 1
         );
 
-        sendLog('✅ SEMUA SESI SELESAI!');
+        res.write('✅ SEMUA SESI SELESAI!\n');
         res.end();
 
     } catch (error) {
-        sendLog(`❌ ERROR: ${error.message}`);
+        console.error('Bot error:', error);
+        res.write(`❌ ERROR: ${error.message}\n`);
         res.end();
     }
-});
-
-// Health check untuk Railway
-app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
 app.listen(PORT, () => {
